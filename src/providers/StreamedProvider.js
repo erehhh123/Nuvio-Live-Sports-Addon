@@ -31,7 +31,6 @@ class StreamedProvider extends BaseProvider {
 
   async getItems() {
     return this.cache.remember('provider:streamed:items:v2', async () => {
-      // Do not make the whole catalog disappear just because one endpoint is flaky.
       const [liveResult, todayResult] = await Promise.all([
         this.optionalRequest('/api/matches/live'),
         this.optionalRequest('/api/matches/all-today')
@@ -41,7 +40,6 @@ class StreamedProvider extends BaseProvider {
       let today = todayResult.ok && Array.isArray(todayResult.value) ? todayResult.value : [];
       let posterBase = todayResult.base || liveResult.base || this.config.bases[0];
 
-      // Last-resort discovery fallback: if both focused feeds fail, use the all feed.
       if (!live.length && !today.length) {
         const allResult = await this.optionalRequest('/api/matches/all');
         if (allResult.ok && Array.isArray(allResult.value)) {
@@ -91,9 +89,43 @@ class StreamedProvider extends BaseProvider {
     return items.find(x => x.sourceId === String(sourceId)) || null;
   }
 
-  // Event discovery is intentionally separate from playback. This keeps the live feed
-  // visible in Nuvio even when no authorized playback source is configured.
-  async getStreams() { return []; }
+  // Resolve Streamed's documented public Streams API into external playback entries.
+  // The API returns embedUrl values rather than direct HLS media URLs, so these are
+  // intentionally exposed as externalUrl instead of pretending they are native HLS.
+  async getStreams(sourceId) {
+    const item = await this.getItem(sourceId);
+    if (!item || !Array.isArray(item.rawSources) || item.rawSources.length === 0) return [];
+
+    const requests = item.rawSources
+      .filter(src => src && src.source != null && src.id != null)
+      .map(async src => {
+        const source = encodeURIComponent(String(src.source));
+        const id = encodeURIComponent(String(src.id));
+        const result = await this.optionalRequest(`/api/stream/${source}/${id}`);
+        if (!result.ok || !Array.isArray(result.value)) return [];
+
+        return result.value
+          .filter(stream => stream && typeof stream.embedUrl === 'string' && /^https?:\/\//i.test(stream.embedUrl))
+          .map((stream, index) => ({
+            name: `Streamed • ${stream.source || src.source}`,
+            title: [
+              stream.language || 'Live',
+              stream.hd ? 'HD' : null,
+              Number.isFinite(Number(stream.streamNo)) ? `#${stream.streamNo}` : `#${index + 1}`
+            ].filter(Boolean).join(' • '),
+            externalUrl: stream.embedUrl
+          }));
+      });
+
+    const settled = await Promise.allSettled(requests);
+    const streams = settled.flatMap(result =>
+      result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []
+    );
+
+    const unique = new Map();
+    for (const stream of streams) unique.set(stream.externalUrl, stream);
+    return [...unique.values()];
+  }
 
   async health() {
     return { provider: this.id, mirrors: await this.mirrors.health() };
