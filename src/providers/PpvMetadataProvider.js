@@ -1,6 +1,7 @@
 const BaseProvider = require('./BaseProvider');
 const { makeId } = require('../utils/ids');
 const { normalizeCategory, isTwentyFourSeven, isProbablyLive, posterFallback } = require('../utils/normalize');
+const { firstDirectMediaUrl, firstExternalUrl } = require('../utils/media');
 const { MirrorManager } = require('../services/MirrorManager');
 
 class PpvMetadataProvider extends BaseProvider {
@@ -18,7 +19,7 @@ class PpvMetadataProvider extends BaseProvider {
   }
 
   async getItems() {
-    return this.cache.remember('provider:ppv:items:v3', async () => {
+    return this.cache.remember('provider:ppv:items:v4', async () => {
       const { value: data } = await this.mirrors.requestJson(this.feedPath, {
         headers: { accept: 'application/json' }
       });
@@ -48,9 +49,9 @@ class PpvMetadataProvider extends BaseProvider {
             live: Boolean(raw.live) || isProbablyLive(startTime, false),
             is24_7: Boolean(raw.is24_7) || isTwentyFourSeven(base),
             poster: raw.poster || raw.image || posterFallback(category),
-            description: `${base.tag || category} listing from the configured PPV metadata feed.`,
+            description: `${base.tag || category} listing from the configured PPV feed.`,
             viewers: Number.parseInt(raw.viewers || '0', 10) || 0,
-            watchUrl: firstHttpUrl(raw.externalUrl, raw.watchUrl, raw.url, raw.link, raw.embedUrl)
+            playbackCandidate: raw
           });
         }
       }
@@ -63,15 +64,22 @@ class PpvMetadataProvider extends BaseProvider {
     return items.find(x => x.sourceId === String(sourceId)) || null;
   }
 
-  // Only expose a viewing URL when the configured feed already provides one.
-  // No embed extraction or protected-media resolution is performed here.
   async getStreams(sourceId) {
     const item = await this.getItem(sourceId);
-    if (!item || !item.watchUrl) return [];
+    if (!item || !item.playbackCandidate) return [];
+
+    const raw = item.playbackCandidate;
+    const directUrl = firstDirectMediaUrl(raw);
+    const externalUrl = directUrl ? '' : firstExternalUrl(raw);
+    if (!directUrl && !externalUrl) return [];
+
     return [{
       name: 'PPV',
-      title: item.is24_7 ? '24/7 Web Player' : 'Live Web Player',
-      externalUrl: item.watchUrl
+      title: [item.is24_7 ? '24/7' : 'Live', raw.quality || raw.resolution || null].filter(Boolean).join(' • '),
+      url: directUrl || undefined,
+      externalUrl: externalUrl || undefined,
+      resolution: raw.resolution || raw.quality || null,
+      sourceName: 'ppv'
     }];
   }
 
@@ -92,13 +100,6 @@ function normalizeGroups(data) {
   }
   if (Array.isArray(data.items)) return [{ category: data.category || 'other', streams: data.items }];
   return [];
-}
-
-function firstHttpUrl(...values) {
-  for (const value of values) {
-    if (typeof value === 'string' && /^https?:\/\//i.test(value)) return value;
-  }
-  return '';
 }
 
 function toMillis(value) {
