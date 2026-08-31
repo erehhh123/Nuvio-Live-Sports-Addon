@@ -30,11 +30,12 @@ class Aggregator {
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = dayStart.getTime() + 24 * 60 * 60_000;
 
-    if (catalogId === 'nuvio_sports_live') items = items.filter(x => x.live && !x.is24_7);
+    if (catalogId === 'nuvio_sports_test') items = items.filter(x => x.provider === 'test');
+    else if (catalogId === 'nuvio_sports_live') items = items.filter(x => x.live && !x.is24_7 && x.provider !== 'test');
     else if (catalogId === 'nuvio_sports_today') {
-      items = items.filter(x => x.is24_7 || x.live || (x.startTime && x.startTime >= dayStart.getTime() && x.startTime < dayEnd));
+      items = items.filter(x => x.provider !== 'test' && (x.is24_7 || x.live || (x.startTime && x.startTime >= dayStart.getTime() && x.startTime < dayEnd)));
     }
-    else if (catalogId === 'nuvio_sports_networks') items = items.filter(x => x.is24_7);
+    else if (catalogId === 'nuvio_sports_networks') items = items.filter(x => x.is24_7 && x.provider !== 'test');
     else if (catalogId === 'nuvio_sports_upcoming') items = items.filter(x => !x.is24_7 && x.startTime && x.startTime > now);
     else if (SPORT_CATALOGS[catalogId]) {
       const allowed = SPORT_CATALOGS[catalogId];

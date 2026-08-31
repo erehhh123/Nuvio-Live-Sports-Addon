@@ -26,6 +26,7 @@ module.exports = {
   publicBaseUrl: process.env.PUBLIC_BASE_URL || '',
   requestTimeoutMs: intEnv('REQUEST_TIMEOUT_MS', 7000),
   cacheTtlMs: intEnv('CACHE_TTL_SECONDS', 60) * 1000,
+  testProviderEnabled: boolEnv('TEST_PROVIDER_ENABLED', true),
 
   streamed: {
     enabled: boolEnv('STREAMED_ENABLED', true),

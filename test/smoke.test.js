@@ -50,3 +50,16 @@ test('today feed displays discovered events even when they have no playback stre
   assert.equal(feed[0].title, 'Team A vs Team B');
   assert.deepEqual(await agg.streams(feed[0].id), []);
 });
+
+const TestHlsProvider = require('../src/providers/TestHlsProvider');
+
+test('public HLS playback-test provider appears and returns a stream', async () => {
+  const provider = new TestHlsProvider({ cache, enabled: true });
+  const agg = new Aggregator([provider]);
+  const items = await agg.catalog('nuvio_sports_test');
+  assert.equal(items.length, 1);
+  assert.equal(items[0].provider, 'test');
+  const streams = await agg.streams(items[0].id);
+  assert.equal(streams.length, 1);
+  assert.match(streams[0].url, /^https:\/\/devstreaming-cdn\.apple\.com\//);
+});

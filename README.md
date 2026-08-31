@@ -147,3 +147,16 @@ GET /health
 `/debug/feed.json` is the fastest way to verify whether upstream metadata is reaching the addon. If it contains `metas`, Nuvio should have catalog cards to display after refreshing/reinstalling the addon.
 
 The Streamed adapter now tolerates partial failures: if `/api/matches/live` fails but `/api/matches/all-today` works (or vice versa), the working feed is still returned. If both fail, `/api/matches/all` is tried as a final metadata fallback.
+
+## Playback test (v1.2)
+
+This build includes a `🧪 Playback Test` catalog enabled by default. It returns Apple's public HLS example stream so you can verify that Nuvio/Stremio sees a provider and can start playback independently of the sports metadata providers. Apple publishes HLS example streams for developer testing.
+
+After deployment, check:
+
+- `/health` — should report version `1.2.0`
+- `/catalog/tv/nuvio_sports_test.json` — should contain `Apple HLS Playback Test`
+- `/stream/tv/ls:test:apple-bipbop.json` — should return one stream
+- `/debug/playback-test.json` — convenience endpoint showing the same stream result
+
+Set `TEST_PROVIDER_ENABLED=false` after testing if you want to hide the test catalog.

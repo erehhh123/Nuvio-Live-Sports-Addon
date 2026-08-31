@@ -8,10 +8,12 @@ const Aggregator = require('./services/Aggregator');
 const StreamedProvider = require('./providers/StreamedProvider');
 const PpvMetadataProvider = require('./providers/PpvMetadataProvider');
 const AuthorizedJsonProvider = require('./providers/AuthorizedJsonProvider');
+const TestHlsProvider = require('./providers/TestHlsProvider');
 const { posterFallback } = require('./utils/normalize');
 
 const cache = new Cache(config.cacheTtlMs);
 const providers = [];
+if (config.testProviderEnabled) providers.push(new TestHlsProvider({ cache, enabled: true }));
 if (config.streamed.enabled) providers.push(new StreamedProvider({
   cache,
   config: { ...config.streamed, timeoutMs: config.requestTimeoutMs }
@@ -93,6 +95,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/debug/feed.json') {
       const items = await aggregator.catalog('nuvio_sports_today');
       return json(res, 200, { stats: await aggregator.stats(), metas: items.map(toMetaPreview) });
+    }
+    if (url.pathname === '/debug/playback-test.json') {
+      const id = 'ls:test:apple-bipbop';
+      return json(res, 200, { id, streams: await aggregator.streams(id) });
     }
 
     let m = /^\/catalog\/tv\/([^/]+)(?:\/([^/]+))?\.json$/.exec(url.pathname);
