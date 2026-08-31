@@ -9,6 +9,7 @@ const StreamedProvider = require('./providers/StreamedProvider');
 const PpvMetadataProvider = require('./providers/PpvMetadataProvider');
 const AuthorizedJsonProvider = require('./providers/AuthorizedJsonProvider');
 const TestHlsProvider = require('./providers/TestHlsProvider');
+const { makeId } = require('./utils/ids');
 const { posterFallback } = require('./utils/normalize');
 
 const cache = new Cache(config.cacheTtlMs);
@@ -49,24 +50,30 @@ function toMetaPreview(item) {
     type: 'tv',
     name: `${item.live ? '🔴 ' : ''}${item.title}`,
     poster: item.poster || posterFallback(item.category),
-    posterShape: 'poster',
+    posterShape: 'landscape',
+    background: item.poster || posterFallback(item.category),
     description: item.description,
     genres: [item.category, item.league, item.providerName].filter(Boolean),
-    releaseInfo: item.startTime ? new Date(item.startTime).toISOString() : undefined
+    releaseInfo: item.live ? (item.is24_7 ? '24/7' : 'LIVE') : (item.startTime ? new Date(item.startTime).toISOString() : undefined),
+    behaviorHints: {
+      defaultVideoId: item.id
+    }
   };
 }
 
 function toMeta(item) {
   return {
     ...toMetaPreview(item),
-    background: item.poster,
     description: [
       item.description,
       `Provider: ${item.providerName}`,
       item.startTime ? `Start: ${new Date(item.startTime).toISOString()}` : null,
       item.is24_7 ? '24/7 channel listing' : null,
       Number.isFinite(item.sourceCount) ? `Listed sources: ${item.sourceCount}` : null
-    ].filter(Boolean).join('\n')
+    ].filter(Boolean).join('\n'),
+    behaviorHints: {
+      defaultVideoId: item.id
+    }
   };
 }
 
@@ -97,8 +104,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { stats: await aggregator.stats(), metas: items.map(toMetaPreview) });
     }
     if (url.pathname === '/debug/playback-test.json') {
-      const id = 'ls:test:apple-bipbop';
-      return json(res, 200, { id, streams: await aggregator.streams(id) });
+      const id = makeId('test', 'apple-bipbop');
+      return json(res, 200, {
+        id,
+        meta: toMeta(await aggregator.item(id)),
+        streamPath: `/stream/tv/${encodeURIComponent(id)}.json`,
+        streams: await aggregator.streams(id)
+      });
     }
 
     let m = /^\/catalog\/tv\/([^/]+)(?:\/([^/]+))?\.json$/.exec(url.pathname);
