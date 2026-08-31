@@ -18,7 +18,7 @@ class PpvMetadataProvider extends BaseProvider {
   }
 
   async getItems() {
-    return this.cache.remember('provider:ppv:items:v2', async () => {
+    return this.cache.remember('provider:ppv:items:v3', async () => {
       const { value: data } = await this.mirrors.requestJson(this.feedPath, {
         headers: { accept: 'application/json' }
       });
@@ -49,7 +49,8 @@ class PpvMetadataProvider extends BaseProvider {
             is24_7: Boolean(raw.is24_7) || isTwentyFourSeven(base),
             poster: raw.poster || raw.image || posterFallback(category),
             description: `${base.tag || category} listing from the configured PPV metadata feed.`,
-            viewers: Number.parseInt(raw.viewers || '0', 10) || 0
+            viewers: Number.parseInt(raw.viewers || '0', 10) || 0,
+            watchUrl: firstHttpUrl(raw.externalUrl, raw.watchUrl, raw.url, raw.link, raw.embedUrl)
           });
         }
       }
@@ -62,8 +63,17 @@ class PpvMetadataProvider extends BaseProvider {
     return items.find(x => x.sourceId === String(sourceId)) || null;
   }
 
-  // Catalog metadata only. Playback is supplied by an authorized provider/feed.
-  async getStreams() { return []; }
+  // Only expose a viewing URL when the configured feed already provides one.
+  // No embed extraction or protected-media resolution is performed here.
+  async getStreams(sourceId) {
+    const item = await this.getItem(sourceId);
+    if (!item || !item.watchUrl) return [];
+    return [{
+      name: 'PPV',
+      title: item.is24_7 ? '24/7 Web Player' : 'Live Web Player',
+      externalUrl: item.watchUrl
+    }];
+  }
 
   async health() {
     return { provider: this.id, feedPath: this.feedPath, mirrors: await this.mirrors.health() };
@@ -73,17 +83,22 @@ class PpvMetadataProvider extends BaseProvider {
 function normalizeGroups(data) {
   if (!data) return [];
   if (Array.isArray(data)) {
-    // Flat arrays are accepted as a single generic group.
     if (data.every(x => !x || !Array.isArray(x.streams))) return [{ category: 'other', streams: data }];
     return data;
   }
   if (Array.isArray(data.streams)) {
-    // Existing PPV shape: { success: true, streams: [{ category, streams: [...] }] }
     if (data.streams.some(x => x && Array.isArray(x.streams))) return data.streams;
     return [{ category: data.category || 'other', streams: data.streams }];
   }
   if (Array.isArray(data.items)) return [{ category: data.category || 'other', streams: data.items }];
   return [];
+}
+
+function firstHttpUrl(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && /^https?:\/\//i.test(value)) return value;
+  }
+  return '';
 }
 
 function toMillis(value) {
