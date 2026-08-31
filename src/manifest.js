@@ -1,11 +1,11 @@
 module.exports = {
   id: 'community.nuvio.live-sports.safe-starter',
-  version: '1.2.0',
+  version: '1.3.0',
   name: '🏟️ Live Sports Hub',
   description: 'Live sports feeds for Nuvio/Stremio with resilient event discovery, provider failover, and optional authorized playback.',
   types: ['tv'],
   resources: ['catalog', 'meta', 'stream'],
-  idPrefixes: ['ls:'],
+  idPrefixes: ['nuvio_sport_'],
   catalogs: [
     { type: 'tv', id: 'nuvio_sports_test', name: '🧪 Playback Test', extra: [] },
     { type: 'tv', id: 'nuvio_sports_live', name: '🔴 Live Now', extra: [{ name: 'search', isRequired: false }] },
