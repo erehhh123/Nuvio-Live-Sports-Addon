@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: nuvio-live-sports-addon
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: STREAMED_ENABLED
+        value: true
+      - key: PPV_ENABLED
+        value: true
+      - key: CACHE_TTL_SECONDS
+        value: 60
