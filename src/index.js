@@ -1,8 +1,10 @@
-const http = require('node:http');
-const fs = require('node:fs');
 const path = require('node:path');
+const express = require('express');
+const cors = require('cors');
+const { getRouter } = require('stremio-addon-sdk');
+
 const config = require('./config');
-const manifest = require('./manifest');
+const { manifest, builder } = require('./manifest');
 const Cache = require('./services/Cache');
 const Aggregator = require('./services/Aggregator');
 const StreamedProvider = require('./providers/StreamedProvider');
@@ -10,140 +12,100 @@ const PpvMetadataProvider = require('./providers/PpvMetadataProvider');
 const AuthorizedJsonProvider = require('./providers/AuthorizedJsonProvider');
 const TestHlsProvider = require('./providers/TestHlsProvider');
 const { makeId } = require('./utils/ids');
-const { posterFallback } = require('./utils/normalize');
+const { toMeta, toMetaPreview, handleCatalog, handleMeta } = require('./catalog');
+const { handleStream } = require('./streams');
 
 const cache = new Cache(config.cacheTtlMs);
 const providers = [];
-if (config.testProviderEnabled) providers.push(new TestHlsProvider({ cache, enabled: true }));
-if (config.streamed.enabled) providers.push(new StreamedProvider({
-  cache,
-  config: { ...config.streamed, timeoutMs: config.requestTimeoutMs }
-}));
-if (config.ppv.enabled) providers.push(new PpvMetadataProvider({
-  cache,
-  config: { ...config.ppv, timeoutMs: config.requestTimeoutMs }
-}));
+
+if (config.testProviderEnabled) {
+  providers.push(new TestHlsProvider({ cache, enabled: true }));
+}
+if (config.streamed.enabled) {
+  providers.push(new StreamedProvider({
+    cache,
+    config: { ...config.streamed, timeoutMs: config.requestTimeoutMs }
+  }));
+}
+if (config.ppv.enabled) {
+  providers.push(new PpvMetadataProvider({
+    cache,
+    config: { ...config.ppv, timeoutMs: config.requestTimeoutMs }
+  }));
+}
 providers.push(new AuthorizedJsonProvider({
   cache,
   config: config.authorized,
   timeoutMs: config.requestTimeoutMs
 }));
+
 const aggregator = new Aggregator(providers);
 
-function json(res, status, body) {
-  res.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'access-control-allow-origin': '*',
-    'cache-control': 'public, max-age=20'
+// Register the same SDK handler model used by conventional Stremio addons.
+builder.defineCatalogHandler(({ type, id, extra }) =>
+  handleCatalog(aggregator, type, id, extra)
+);
+builder.defineMetaHandler(({ type, id }) =>
+  handleMeta(aggregator, type, id)
+);
+builder.defineStreamHandler(({ type, id }) =>
+  handleStream(aggregator, type, id)
+);
+
+const app = express();
+app.disable('x-powered-by');
+app.use(cors());
+app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
+
+app.get('/', (req, res) => {
+  res.type('html').send(`<!doctype html>
+<html><head><meta charset="utf-8"><title>${manifest.name}</title></head>
+<body style="font-family:sans-serif;max-width:760px;margin:40px auto;padding:0 20px">
+<h1>${manifest.name}</h1>
+<p>Version ${manifest.version}</p>
+<p>Install this addon with <code>${config.publicBaseUrl || ''}/manifest.json</code></p>
+<p><a href="/manifest.json">manifest.json</a> · <a href="/health">health</a> · <a href="/debug/playback-test.json">playback test</a></p>
+</body></html>`);
+});
+
+app.get('/configure', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'configure.html'));
+});
+
+app.get('/health', async (req, res) => {
+  res.json({
+    ok: true,
+    version: manifest.version,
+    sdk: true,
+    stats: await aggregator.stats(),
+    providers: await aggregator.health()
   });
-  res.end(JSON.stringify(body));
-}
-
-function html(res, status, body) {
-  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
-  res.end(body);
-}
-
-function toMetaPreview(item) {
-  return {
-    id: item.id,
-    type: 'tv',
-    name: `${item.live ? '🔴 ' : ''}${item.title}`,
-    poster: item.poster || posterFallback(item.category),
-    posterShape: 'landscape',
-    background: item.poster || posterFallback(item.category),
-    description: item.description,
-    genres: [item.category, item.league, item.providerName].filter(Boolean),
-    releaseInfo: item.live ? (item.is24_7 ? '24/7' : 'LIVE') : (item.startTime ? new Date(item.startTime).toISOString() : undefined),
-    behaviorHints: {
-      defaultVideoId: item.id
-    }
-  };
-}
-
-function toMeta(item) {
-  return {
-    ...toMetaPreview(item),
-    description: [
-      item.description,
-      `Provider: ${item.providerName}`,
-      item.startTime ? `Start: ${new Date(item.startTime).toISOString()}` : null,
-      item.is24_7 ? '24/7 channel listing' : null,
-      Number.isFinite(item.sourceCount) ? `Listed sources: ${item.sourceCount}` : null
-    ].filter(Boolean).join('\n'),
-    behaviorHints: {
-      defaultVideoId: item.id
-    }
-  };
-}
-
-function parseExtra(text) {
-  if (!text) return {};
-  const params = new URLSearchParams(text);
-  return Object.fromEntries(params.entries());
-}
-
-const server = http.createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,OPTIONS' });
-      return res.end();
-    }
-
-    if (url.pathname === '/' || url.pathname === '/configure') {
-      const file = path.join(__dirname, '..', 'public', 'configure.html');
-      return html(res, 200, fs.readFileSync(file, 'utf8'));
-    }
-    if (url.pathname === '/manifest.json') return json(res, 200, manifest);
-    if (url.pathname === '/health') {
-      return json(res, 200, { ok: true, version: manifest.version, stats: await aggregator.stats(), providers: await aggregator.health() });
-    }
-    if (url.pathname === '/debug/feed.json') {
-      const items = await aggregator.catalog('nuvio_sports_today');
-      return json(res, 200, { stats: await aggregator.stats(), metas: items.map(toMetaPreview) });
-    }
-    if (url.pathname === '/debug/playback-test.json') {
-      const id = makeId('test', 'apple-bipbop');
-      return json(res, 200, {
-        id,
-        meta: toMeta(await aggregator.item(id)),
-        streamPath: `/stream/tv/${encodeURIComponent(id)}.json`,
-        streams: await aggregator.streams(id)
-      });
-    }
-
-    let m = /^\/catalog\/tv\/([^/]+)(?:\/([^/]+))?\.json$/.exec(url.pathname);
-    if (m) {
-      const catalogId = decodeURIComponent(m[1]);
-      const extra = { ...parseExtra(m[2]), ...Object.fromEntries(url.searchParams.entries()) };
-      const items = await aggregator.catalog(catalogId, extra);
-      return json(res, 200, { metas: items.map(toMetaPreview) });
-    }
-
-    m = /^\/meta\/tv\/(.+)\.json$/.exec(url.pathname);
-    if (m) {
-      const item = await aggregator.item(decodeURIComponent(m[1]));
-      return item ? json(res, 200, { meta: toMeta(item) }) : json(res, 404, { meta: null });
-    }
-
-    m = /^\/stream\/tv\/(.+)\.json$/.exec(url.pathname);
-    if (m) {
-      const streams = await aggregator.streams(decodeURIComponent(m[1]));
-      return json(res, 200, { streams });
-    }
-
-    return json(res, 404, { error: 'Not found' });
-  } catch (err) {
-    console.error(err);
-    return json(res, 500, { error: err.message || 'Internal server error' });
-  }
 });
 
-server.listen(config.port, '0.0.0.0', () => {
-  const base = config.publicBaseUrl || `http://localhost:${config.port}`;
-  console.log(`Live Sports Hub listening on ${base}`);
-  console.log(`Install manifest: ${base.replace(/\/$/, '')}/manifest.json`);
+app.get('/debug/feed.json', async (req, res) => {
+  const items = await aggregator.catalog('nuvio_sports_today');
+  res.json({ stats: await aggregator.stats(), metas: items.map(toMetaPreview) });
 });
 
-module.exports = { server, aggregator };
+app.get('/debug/playback-test.json', async (req, res) => {
+  const id = makeId('test', 'apple-bipbop');
+  const item = await aggregator.item(id);
+  const streamResponse = await handleStream(aggregator, 'tv', id);
+  res.json({
+    id,
+    meta: item ? toMeta(item) : null,
+    streamPath: `/stream/tv/${encodeURIComponent(id)}.json`,
+    streams: streamResponse.streams
+  });
+});
+
+// Mount the official Stremio addon router last. It serves manifest/catalog/meta/stream.
+app.use(getRouter(builder.getInterface()));
+
+const server = app.listen(config.port, '0.0.0.0', () => {
+  const base = (config.publicBaseUrl || `http://localhost:${config.port}`).replace(/\/$/, '');
+  console.log(`${manifest.name} v${manifest.version} listening on ${base}`);
+  console.log(`Install manifest: ${base}/manifest.json`);
+});
+
+module.exports = { app, server, aggregator, builder };
