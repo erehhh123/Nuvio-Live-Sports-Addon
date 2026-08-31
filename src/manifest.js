@@ -2,7 +2,7 @@ const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
   id: 'community.nuvio.live-sports',
-  version: '1.4.0',
+  version: '1.4.1',
   name: '🏟️ Live Sports Hub',
   description: 'Nuvio/Stremio live sports addon with SDK-native catalogs and direct/authorized playback support.',
   types: ['tv'],
