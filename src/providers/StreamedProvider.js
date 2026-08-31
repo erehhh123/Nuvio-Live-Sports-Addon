@@ -1,6 +1,7 @@
 const BaseProvider = require('./BaseProvider');
 const { makeId } = require('../utils/ids');
 const { normalizeCategory, isProbablyLive, posterFallback } = require('../utils/normalize');
+const { firstDirectMediaUrl, firstExternalUrl } = require('../utils/media');
 const { MirrorManager, discoverStreamedOfficialMirrors } = require('../services/MirrorManager');
 
 class StreamedProvider extends BaseProvider {
@@ -89,9 +90,9 @@ class StreamedProvider extends BaseProvider {
     return items.find(x => x.sourceId === String(sourceId)) || null;
   }
 
-  // Resolve Streamed's documented public Streams API into external playback entries.
-  // The API returns embedUrl values rather than direct HLS media URLs, so these are
-  // intentionally exposed as externalUrl instead of pretending they are native HLS.
+  // Combined playback path: query the provider's documented stream entries, prefer
+  // a direct HLS/DASH URL when the response already exposes one, and keep embedUrl
+  // only as a browser-player fallback.
   async getStreams(sourceId) {
     const item = await this.getItem(sourceId);
     if (!item || !Array.isArray(item.rawSources) || item.rawSources.length === 0) return [];
@@ -104,27 +105,32 @@ class StreamedProvider extends BaseProvider {
         const result = await this.optionalRequest(`/api/stream/${source}/${id}`);
         if (!result.ok || !Array.isArray(result.value)) return [];
 
-        return result.value
-          .filter(stream => stream && typeof stream.embedUrl === 'string' && /^https?:\/\//i.test(stream.embedUrl))
-          .map((stream, index) => ({
+        return result.value.map((stream, index) => {
+          if (!stream || typeof stream !== 'object') return null;
+          const directUrl = firstDirectMediaUrl(stream);
+          const externalUrl = directUrl ? '' : firstExternalUrl(stream);
+          if (!directUrl && !externalUrl) return null;
+
+          return {
             name: `Streamed • ${stream.source || src.source}`,
             title: [
               stream.language || 'Live',
               stream.hd ? 'HD' : null,
+              stream.quality || stream.resolution || null,
               Number.isFinite(Number(stream.streamNo)) ? `#${stream.streamNo}` : `#${index + 1}`
             ].filter(Boolean).join(' • '),
-            externalUrl: stream.embedUrl
-          }));
+            url: directUrl || undefined,
+            externalUrl: externalUrl || undefined,
+            resolution: stream.resolution || stream.quality || null,
+            sourceName: `streamed:${stream.source || src.source}`
+          };
+        }).filter(Boolean);
       });
 
     const settled = await Promise.allSettled(requests);
-    const streams = settled.flatMap(result =>
+    return settled.flatMap(result =>
       result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []
     );
-
-    const unique = new Map();
-    for (const stream of streams) unique.set(stream.externalUrl, stream);
-    return [...unique.values()];
   }
 
   async health() {
