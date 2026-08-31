@@ -1,6 +1,6 @@
 {
   "name": "nuvio-live-sports-addon",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "description": "Nuvio/Stremio live sports addon with SDK-native catalog, meta and stream handlers plus direct/authorized HLS playback support.",
   "type": "commonjs",
