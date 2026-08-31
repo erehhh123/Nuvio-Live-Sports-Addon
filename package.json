@@ -1,6 +1,6 @@
 {
   "name": "nuvio-live-sports-addon-starter",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "Zero-dependency Stremio/Nuvio live sports feed addon with resilient metadata discovery, mirror failover, and authorized playback feeds.",
   "type": "commonjs",
@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test",
-    "check": "node --check src/index.js && node --check src/services/Aggregator.js && node --check src/providers/StreamedProvider.js && node --check src/providers/PpvMetadataProvider.js && node --check src/providers/AuthorizedJsonProvider.js"
+    "check": "node --check src/index.js && node --check src/services/Aggregator.js && node --check src/providers/StreamedProvider.js && node --check src/providers/PpvMetadataProvider.js && node --check src/providers/AuthorizedJsonProvider.js && node --check src/providers/TestHlsProvider.js"
   },
   "engines": {
     "node": ">=20"
