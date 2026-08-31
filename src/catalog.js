@@ -23,13 +23,8 @@ function toMetaPreview(item) {
 }
 
 function toMeta(item) {
-  const preview = toMetaPreview(item);
-  const released = item.startTime
-    ? new Date(item.startTime).toISOString()
-    : new Date(0).toISOString();
-
   return {
-    ...preview,
+    ...toMetaPreview(item),
     description: [
       item.description,
       item.providerName ? `Provider: ${item.providerName}` : null,
@@ -37,13 +32,6 @@ function toMeta(item) {
       item.is24_7 ? '24/7 channel listing' : null,
       Number.isFinite(item.sourceCount) ? `Listed sources: ${item.sourceCount}` : null
     ].filter(Boolean).join('\n'),
-    videos: [{
-      id: item.id,
-      title: item.title,
-      released,
-      season: 1,
-      episode: 1
-    }],
     behaviorHints: {
       defaultVideoId: item.id
     }
