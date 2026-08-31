@@ -28,3 +28,25 @@ test('authorized 24/7 channel appears and returns stream', async () => {
   const streams = await agg.streams(channels[0].id);
   assert.equal(streams[0].url, 'https://example.com/live.m3u8');
 });
+
+test('today feed displays discovered events even when they have no playback streams', async () => {
+  const now = Date.now();
+  const metadataOnly = {
+    id: 'metadata',
+    async getItems() {
+      return [{
+        id: makeId('metadata', 'event-1'), provider: 'metadata', providerName: 'Metadata Feed', sourceId: 'event-1',
+        title: 'Team A vs Team B', category: 'football', league: 'football', startTime: now,
+        live: true, is24_7: false, poster: 'https://example.com/poster.jpg'
+      }];
+    },
+    async getItem(id) { return id === 'event-1' ? (await this.getItems())[0] : null; },
+    async getStreams() { return []; },
+    async health() { return { provider: 'metadata', ok: true }; }
+  };
+  const agg = new Aggregator([metadataOnly]);
+  const feed = await agg.catalog('nuvio_sports_today');
+  assert.equal(feed.length, 1);
+  assert.equal(feed[0].title, 'Team A vs Team B');
+  assert.deepEqual(await agg.streams(feed[0].id), []);
+});

@@ -3,7 +3,7 @@ const { fetchJson, fetchText, fetchWithTimeout } = require('../utils/http');
 class MirrorManager {
   constructor({ name, bases, timeoutMs = 7000, cache, mirrorIndex = '', discover = null }) {
     this.name = name;
-    this.bases = [...new Set((bases || []).map(normalizeBase))];
+    this.bases = [...new Set((bases || []).map(normalizeBase).filter(Boolean))];
     this.timeoutMs = timeoutMs;
     this.cache = cache;
     this.mirrorIndex = mirrorIndex;
@@ -23,7 +23,7 @@ class MirrorManager {
           console.warn(`[${this.name}] mirror discovery failed: ${err.message}`);
         }
       }
-      return [...new Set([...this.bases, ...discovered.map(normalizeBase)])];
+      return [...new Set([...this.bases, ...discovered.map(normalizeBase).filter(Boolean)])];
     }, 10 * 60_000);
   }
 
@@ -54,9 +54,16 @@ class MirrorManager {
       const started = Date.now();
       try {
         const res = await fetchWithTimeout(base, { method: 'HEAD' }, Math.min(this.timeoutMs, 4000));
-        return { base, ok: res.ok || res.status < 500, status: res.status, ms: Date.now() - started };
+        return {
+          base,
+          reachable: true,
+          usable: res.ok,
+          ok: res.ok,
+          status: res.status,
+          ms: Date.now() - started
+        };
       } catch (err) {
-        return { base, ok: false, error: err.message, ms: Date.now() - started };
+        return { base, reachable: false, usable: false, ok: false, error: err.message, ms: Date.now() - started };
       }
     }));
     return checks;

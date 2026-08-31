@@ -36,7 +36,8 @@ module.exports = {
 
   ppv: {
     enabled: boolEnv('PPV_ENABLED', true),
-    apiBases: listEnv('PPV_API_BASES', ['https://api.ppv.st'])
+    apiBases: listEnv('PPV_API_BASES', ['https://api.ppv.st']),
+    feedPath: process.env.PPV_FEED_PATH || '/api/streams'
   },
 
   authorized: {

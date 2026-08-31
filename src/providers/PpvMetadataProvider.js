@@ -8,6 +8,7 @@ class PpvMetadataProvider extends BaseProvider {
     super({ cache });
     this.id = 'ppv';
     this.name = 'PPV';
+    this.feedPath = config.feedPath || '/api/streams';
     this.mirrors = new MirrorManager({
       name: 'ppv-api',
       bases: config.apiBases,
@@ -17,21 +18,22 @@ class PpvMetadataProvider extends BaseProvider {
   }
 
   async getItems() {
-    return this.cache.remember('provider:ppv:items', async () => {
-      const { value: data } = await this.mirrors.requestJson('/api/streams', {
-        headers: { 'accept': 'application/json' }
+    return this.cache.remember('provider:ppv:items:v2', async () => {
+      const { value: data } = await this.mirrors.requestJson(this.feedPath, {
+        headers: { accept: 'application/json' }
       });
-      if (!data || data.success !== true || !Array.isArray(data.streams)) return [];
+
+      const groups = normalizeGroups(data);
       const out = [];
-      for (const group of data.streams) {
-        const category = normalizeCategory(group.category);
+      for (const group of groups) {
+        const category = normalizeCategory(group.category || group.name || 'other');
         for (const raw of Array.isArray(group.streams) ? group.streams : []) {
           if (!raw || raw.id == null) continue;
-          const startTime = raw.starts_at ? Number(raw.starts_at) * 1000 : null;
+          const startTime = toMillis(raw.starts_at ?? raw.startTime ?? raw.date);
           const base = {
-            title: raw.name || `Sports channel ${raw.id}`,
+            title: raw.name || raw.title || `Sports channel ${raw.id}`,
             category,
-            tag: raw.tag,
+            tag: raw.tag || raw.league,
             startTime
           };
           out.push({
@@ -41,12 +43,12 @@ class PpvMetadataProvider extends BaseProvider {
             sourceId: String(raw.id),
             title: base.title,
             category,
-            league: raw.tag || category,
+            league: base.tag || category,
             startTime,
-            live: isProbablyLive(startTime, false),
-            is24_7: isTwentyFourSeven(base),
-            poster: raw.poster || posterFallback(category),
-            description: `${raw.tag || category} listing from PPV metadata.`,
+            live: Boolean(raw.live) || isProbablyLive(startTime, false),
+            is24_7: Boolean(raw.is24_7) || isTwentyFourSeven(base),
+            poster: raw.poster || raw.image || posterFallback(category),
+            description: `${base.tag || category} listing from the configured PPV metadata feed.`,
             viewers: Number.parseInt(raw.viewers || '0', 10) || 0
           });
         }
@@ -60,12 +62,35 @@ class PpvMetadataProvider extends BaseProvider {
     return items.find(x => x.sourceId === String(sourceId)) || null;
   }
 
-  // Playback URLs/iframes returned by the upstream are deliberately not exposed here.
+  // Catalog metadata only. Playback is supplied by an authorized provider/feed.
   async getStreams() { return []; }
 
   async health() {
-    return { provider: this.id, mirrors: await this.mirrors.health() };
+    return { provider: this.id, feedPath: this.feedPath, mirrors: await this.mirrors.health() };
   }
+}
+
+function normalizeGroups(data) {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    // Flat arrays are accepted as a single generic group.
+    if (data.every(x => !x || !Array.isArray(x.streams))) return [{ category: 'other', streams: data }];
+    return data;
+  }
+  if (Array.isArray(data.streams)) {
+    // Existing PPV shape: { success: true, streams: [{ category, streams: [...] }] }
+    if (data.streams.some(x => x && Array.isArray(x.streams))) return data.streams;
+    return [{ category: data.category || 'other', streams: data.streams }];
+  }
+  if (Array.isArray(data.items)) return [{ category: data.category || 'other', streams: data.items }];
+  return [];
+}
+
+function toMillis(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n < 10_000_000_000 ? n * 1000 : n;
 }
 
 module.exports = PpvMetadataProvider;

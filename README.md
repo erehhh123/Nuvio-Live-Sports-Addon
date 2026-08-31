@@ -129,3 +129,21 @@ GET /health
 npm test
 npm run check
 ```
+
+## Feed troubleshooting (v1.1)
+
+This revision separates **feed discovery** from **playback**, like a normal Stremio live-event catalog. Streamed events can appear even if no playable source is configured.
+
+Useful endpoints after deployment:
+
+```text
+GET /catalog/tv/nuvio_sports_today.json
+GET /catalog/tv/nuvio_sports_live.json
+GET /catalog/tv/nuvio_sports_networks.json
+GET /debug/feed.json
+GET /health
+```
+
+`/debug/feed.json` is the fastest way to verify whether upstream metadata is reaching the addon. If it contains `metas`, Nuvio should have catalog cards to display after refreshing/reinstalling the addon.
+
+The Streamed adapter now tolerates partial failures: if `/api/matches/live` fails but `/api/matches/all-today` works (or vice versa), the working feed is still returned. If both fail, `/api/matches/all` is tried as a final metadata fallback.

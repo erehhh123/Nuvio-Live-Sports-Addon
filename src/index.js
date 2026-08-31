@@ -49,7 +49,7 @@ function toMetaPreview(item) {
     poster: item.poster || posterFallback(item.category),
     posterShape: 'poster',
     description: item.description,
-    genres: [item.category, item.league].filter(Boolean),
+    genres: [item.category, item.league, item.providerName].filter(Boolean),
     releaseInfo: item.startTime ? new Date(item.startTime).toISOString() : undefined
   };
 }
@@ -62,7 +62,8 @@ function toMeta(item) {
       item.description,
       `Provider: ${item.providerName}`,
       item.startTime ? `Start: ${new Date(item.startTime).toISOString()}` : null,
-      item.is24_7 ? '24/7 channel listing' : null
+      item.is24_7 ? '24/7 channel listing' : null,
+      Number.isFinite(item.sourceCount) ? `Listed sources: ${item.sourceCount}` : null
     ].filter(Boolean).join('\n')
   };
 }
@@ -87,7 +88,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/manifest.json') return json(res, 200, manifest);
     if (url.pathname === '/health') {
-      return json(res, 200, { ok: true, version: manifest.version, providers: await aggregator.health() });
+      return json(res, 200, { ok: true, version: manifest.version, stats: await aggregator.stats(), providers: await aggregator.health() });
+    }
+    if (url.pathname === '/debug/feed.json') {
+      const items = await aggregator.catalog('nuvio_sports_today');
+      return json(res, 200, { stats: await aggregator.stats(), metas: items.map(toMetaPreview) });
     }
 
     let m = /^\/catalog\/tv\/([^/]+)(?:\/([^/]+))?\.json$/.exec(url.pathname);
