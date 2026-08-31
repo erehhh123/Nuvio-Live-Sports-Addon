@@ -1,8 +1,10 @@
-module.exports = {
-  id: 'community.nuvio.live-sports.safe-starter',
-  version: '1.3.0',
+const { addonBuilder } = require('stremio-addon-sdk');
+
+const manifest = {
+  id: 'community.nuvio.live-sports',
+  version: '1.4.0',
   name: '🏟️ Live Sports Hub',
-  description: 'Live sports feeds for Nuvio/Stremio with resilient event discovery, provider failover, and optional authorized playback.',
+  description: 'Nuvio/Stremio live sports addon with SDK-native catalogs and direct/authorized playback support.',
   types: ['tv'],
   resources: ['catalog', 'meta', 'stream'],
   idPrefixes: ['nuvio_sport_'],
@@ -18,5 +20,13 @@ module.exports = {
     { type: 'tv', id: 'nuvio_sports_other', name: '🏅 Other Sports', extra: [{ name: 'search', isRequired: false }] },
     { type: 'tv', id: 'nuvio_sports_upcoming', name: '⏱️ Upcoming', extra: [{ name: 'search', isRequired: false }] }
   ],
-  behaviorHints: { adult: false, p2p: false, configurable: false }
+  behaviorHints: {
+    adult: false,
+    p2p: false,
+    configurable: false
+  }
 };
+
+const builder = new addonBuilder(manifest);
+
+module.exports = { manifest, builder };
