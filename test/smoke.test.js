@@ -3,7 +3,10 @@ const assert = require('node:assert/strict');
 const Cache = require('../src/services/Cache');
 const Aggregator = require('../src/services/Aggregator');
 const AuthorizedJsonProvider = require('../src/providers/AuthorizedJsonProvider');
+const TestHlsProvider = require('../src/providers/TestHlsProvider');
 const { makeId, parseId } = require('../src/utils/ids');
+const { firstDirectMediaUrl, firstExternalUrl } = require('../src/utils/media');
+const { normalizeStream, dedupeAndSort } = require('../src/streams');
 
 const cache = new Cache(1000);
 
@@ -51,8 +54,6 @@ test('today feed displays discovered events even when they have no playback stre
   assert.deepEqual(await agg.streams(feed[0].id), []);
 });
 
-const TestHlsProvider = require('../src/providers/TestHlsProvider');
-
 test('public HLS playback-test provider appears and returns a stream', async () => {
   const provider = new TestHlsProvider({ cache, enabled: true });
   const agg = new Aggregator([provider]);
@@ -62,4 +63,22 @@ test('public HLS playback-test provider appears and returns a stream', async () 
   const streams = await agg.streams(items[0].id);
   assert.equal(streams.length, 1);
   assert.match(streams[0].url, /^https:\/\/devstreaming-cdn\.apple\.com\//);
+});
+
+test('direct media detector prefers HLS over embed page', () => {
+  const candidate = {
+    hlsUrl: 'https://media.example/live/master.m3u8?token=abc',
+    embedUrl: 'https://player.example/embed/123'
+  };
+  assert.equal(firstDirectMediaUrl(candidate), candidate.hlsUrl);
+  assert.equal(firstExternalUrl(candidate), candidate.embedUrl);
+});
+
+test('stream pipeline sorts native playback ahead of browser fallback', () => {
+  const native = normalizeStream({ name: 'Direct', title: '1080p', url: 'https://media.example/live.m3u8' }, 0);
+  const web = normalizeStream({ name: 'Web', title: 'Live', externalUrl: 'https://player.example/watch' }, 1);
+  const sorted = dedupeAndSort([web, native]);
+  assert.equal(sorted.length, 2);
+  assert.equal(sorted[0].url, 'https://media.example/live.m3u8');
+  assert.equal(sorted[1].externalUrl, 'https://player.example/watch');
 });
