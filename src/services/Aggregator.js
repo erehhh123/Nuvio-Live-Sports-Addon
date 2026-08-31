@@ -30,17 +30,22 @@ class Aggregator {
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = dayStart.getTime() + 24 * 60 * 60_000;
 
-    if (catalogId === 'nuvio_sports_test') items = items.filter(x => x.provider === 'test');
-    else if (catalogId === 'nuvio_sports_live') items = items.filter(x => x.live && !x.is24_7 && x.provider !== 'test');
-    else if (catalogId === 'nuvio_sports_today') {
-      items = items.filter(x => x.provider !== 'test' && (x.is24_7 || x.live || (x.startTime && x.startTime >= dayStart.getTime() && x.startTime < dayEnd)));
-    }
-    else if (catalogId === 'nuvio_sports_networks') items = items.filter(x => x.is24_7 && x.provider !== 'test');
-    else if (catalogId === 'nuvio_sports_upcoming') items = items.filter(x => !x.is24_7 && x.startTime && x.startTime > now);
-    else if (SPORT_CATALOGS[catalogId]) {
-      const allowed = SPORT_CATALOGS[catalogId];
-      if (allowed.length) items = items.filter(x => allowed.includes(x.category));
-      else items = items.filter(x => !['football','basketball','mma','boxing','wrestling','fight','motorsport','racing','motor sports'].includes(x.category));
+    if (catalogId === 'nuvio_sports_test') {
+      items = items.filter(x => x.provider === 'test');
+    } else {
+      // Roxie-focused addon is event-only: never surface 24/7 channels.
+      items = items.filter(x => x.provider !== 'test' && !x.is24_7);
+
+      if (catalogId === 'nuvio_sports_live') items = items.filter(x => x.live);
+      else if (catalogId === 'nuvio_sports_today') {
+        items = items.filter(x => x.live || (x.startTime && x.startTime >= dayStart.getTime() && x.startTime < dayEnd));
+      }
+      else if (catalogId === 'nuvio_sports_upcoming') items = items.filter(x => x.startTime && x.startTime > now);
+      else if (SPORT_CATALOGS[catalogId]) {
+        const allowed = SPORT_CATALOGS[catalogId];
+        if (allowed.length) items = items.filter(x => allowed.includes(x.category));
+        else items = items.filter(x => !['football','basketball','mma','boxing','wrestling','fight','motorsport','racing','motor sports'].includes(x.category));
+      }
     }
 
     if (extra.genre) items = items.filter(x => x.category === String(extra.genre).toLowerCase());
@@ -53,7 +58,6 @@ class Aggregator {
     for (const item of items) unique.set(item.id, item);
     return [...unique.values()].sort((a, b) => {
       if (a.live !== b.live) return a.live ? -1 : 1;
-      if (a.is24_7 !== b.is24_7) return a.is24_7 ? -1 : 1;
       return (a.startTime || Number.MAX_SAFE_INTEGER) - (b.startTime || Number.MAX_SAFE_INTEGER);
     }).slice(0, 150);
   }
@@ -62,13 +66,13 @@ class Aggregator {
     const items = await this.allItems();
     const providers = {};
     for (const item of items) {
-      providers[item.provider] ||= { total: 0, live: 0, channels24_7: 0, upcoming: 0 };
+      if (item.is24_7) continue;
+      providers[item.provider] ||= { total: 0, live: 0, upcoming: 0 };
       providers[item.provider].total += 1;
       if (item.live) providers[item.provider].live += 1;
-      if (item.is24_7) providers[item.provider].channels24_7 += 1;
-      if (!item.live && !item.is24_7 && item.startTime && item.startTime > Date.now()) providers[item.provider].upcoming += 1;
+      if (!item.live && item.startTime && item.startTime > Date.now()) providers[item.provider].upcoming += 1;
     }
-    return { total: items.length, providers };
+    return { total: Object.values(providers).reduce((sum, p) => sum + p.total, 0), providers };
   }
 
   async item(stremioId) {
