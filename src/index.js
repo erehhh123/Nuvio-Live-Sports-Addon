@@ -7,7 +7,7 @@ const config = require('./config');
 const { manifest, builder } = require('./manifest');
 const Cache = require('./services/Cache');
 const Aggregator = require('./services/Aggregator');
-const PpvMetadataProvider = require('./providers/PpvMetadataProvider');
+const StreamedProvider = require('./providers/StreamedProvider');
 const RoxiePlaybackProvider = require('./providers/RoxiePlaybackProvider');
 const AuthorizedJsonProvider = require('./providers/AuthorizedJsonProvider');
 const TestHlsProvider = require('./providers/TestHlsProvider');
@@ -24,10 +24,10 @@ if (config.testProviderEnabled) {
 
 const roxiePlayback = new RoxiePlaybackProvider({ config: config.roxie });
 
-if (config.ppv.enabled) {
-  providers.push(new PpvMetadataProvider({
+if (config.streamed.enabled) {
+  providers.push(new StreamedProvider({
     cache,
-    config: { ...config.ppv, timeoutMs: config.requestTimeoutMs },
+    config: { ...config.streamed, timeoutMs: config.requestTimeoutMs },
     playbackProvider: roxiePlayback
   }));
 }
@@ -61,7 +61,7 @@ app.get('/', (req, res) => {
 <body style="font-family:sans-serif;max-width:760px;margin:40px auto;padding:0 20px">
 <h1>${manifest.name}</h1>
 <p>Version ${manifest.version}</p>
-<p>PPV provides event metadata; Roxie mappings provide direct/web playback choices.</p>
+<p>Streamed provides event metadata; Roxie mappings provide direct/web playback choices.</p>
 <p>Install this addon with <code>${config.publicBaseUrl || ''}/manifest.json</code></p>
 <p><a href="/manifest.json">manifest.json</a> · <a href="/health">health</a> · <a href="/debug/playback-test.json">playback test</a></p>
 </body></html>`);
