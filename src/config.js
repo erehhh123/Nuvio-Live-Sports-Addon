@@ -28,17 +28,16 @@ module.exports = {
   cacheTtlMs: intEnv('CACHE_TTL_SECONDS', 60) * 1000,
   testProviderEnabled: boolEnv('TEST_PROVIDER_ENABLED', true),
 
-  streamed: {
-    enabled: boolEnv('STREAMED_ENABLED', true),
-    bases: listEnv('STREAMED_BASES', ['https://streamed.pk', 'https://streamed.st']),
-    discoverOfficialMirrors: boolEnv('STREAMED_DISCOVER_OFFICIAL_MIRRORS', true),
-    mirrorIndex: process.env.STREAMED_MIRROR_INDEX || 'https://strmd.link/'
-  },
-
   ppv: {
     enabled: boolEnv('PPV_ENABLED', true),
     apiBases: listEnv('PPV_API_BASES', ['https://api.ppv.st']),
     feedPath: process.env.PPV_FEED_PATH || '/api/streams'
+  },
+
+  roxie: {
+    enabled: boolEnv('ROXIE_ENABLED', true),
+    baseUrl: process.env.ROXIE_BASE_URL || 'https://roxiestreams.info',
+    eventMap: jsonEnv('ROXIE_EVENT_MAP_JSON', [])
   },
 
   authorized: {

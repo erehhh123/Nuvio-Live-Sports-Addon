@@ -1,38 +1,117 @@
-# 🏟️ Live Sports Hub — Nuvio / Stremio Addon Starter
+# 🏟️ Live Sports Hub — Nuvio / Stremio Addon
 
-A zero-dependency Node.js addon implementing the Stremio addon protocol for live sports catalogs.
+Event-only live sports addon for Nuvio/Stremio.
 
-## What is included
+## Current architecture
 
-- `manifest.json` plus catalog/meta/stream routes compatible with Stremio-style clients.
-- Live, upcoming, sport-category, and 24/7 channel catalogs.
-- Streamed event metadata adapter using its published REST match API.
-- Streamed official-mirror failover (`streamed.pk`, `streamed.st`) and optional discovery from `strmd.link`.
-- PPV event/channel metadata adapter using configurable API bases.
-- TTL caching and basic mirror health reporting.
-- `AuthorizedJsonProvider` for direct HLS/HTTP streams you own or are allowed to redistribute.
-- Render and Docker deployment files.
+```text
+PPV metadata API
+      ↓
+Live / Today / sport / Upcoming catalogs
+      ↓
+PPV event selected in Nuvio
+      ↓
+Roxie event mapping
+      ├─ direct HLS/DASH URL → native Nuvio player
+      └─ Roxie web URL      → browser fallback
+```
 
-## Important playback boundary
+Streamed is no longer part of the active provider path. PPV is used for schedules and event metadata only. Playback is delegated to `RoxiePlaybackProvider`.
 
-The Streamed and PPV adapters in this starter intentionally **do not expose upstream embed/stream URLs**. They populate catalogs and metadata only. Direct playback is supplied by `AuthorizedJsonProvider` so you can connect your own licensed IPTV/HLS/API feed without rewriting the addon.
+## Catalogs
+
+- 🧪 Playback Test
+- 🔴 Live Now
+- 📅 Today’s Sports
+- ⚽ Football
+- 🏀 Basketball
+- 🥊 MMA & Boxing
+- 🏎️ Motorsport
+- 🏅 Other Sports
+- ⏱️ Upcoming
+
+24/7 channels are intentionally filtered out.
+
+## Roxie event mappings
+
+Set `ROXIE_EVENT_MAP_JSON` to an array of mappings. A mapping can match the PPV `sourceId`, event title, aliases, and optionally category.
+
+Example:
+
+```json
+[
+  {
+    "match": "Monday Night Raw",
+    "aliases": ["WWE Raw"],
+    "category": "wrestling",
+    "directUrls": [
+      {
+        "title": "Direct HLS",
+        "url": "https://media.example/events/raw/master.m3u8"
+      }
+    ],
+    "webUrl": "https://roxiestreams.info/example-event"
+  }
+]
+```
+
+For an exact PPV event ID, use `sourceId` instead of title matching:
+
+```json
+[
+  {
+    "sourceId": "12345",
+    "directUrl": "https://media.example/events/12345/index.m3u8",
+    "webUrl": "/example-event"
+  }
+]
+```
+
+Relative `webUrl`/`webPath` values are resolved against `ROXIE_BASE_URL`.
+
+Only normal HTTP(S) HLS/DASH-style direct media URLs are accepted for the native option. Use sources you are authorized to access and redistribute.
+
+## Environment
+
+```env
+PORT=7000
+CACHE_TTL_SECONDS=60
+TEST_PROVIDER_ENABLED=true
+
+PPV_ENABLED=true
+PPV_API_BASES=https://api.ppv.st
+PPV_FEED_PATH=/api/streams
+
+ROXIE_ENABLED=true
+ROXIE_BASE_URL=https://roxiestreams.info
+ROXIE_EVENT_MAP_JSON=[]
+```
+
+`ROXIE_EVENT_MAP_JSON=[]` means PPV events still appear, but they return no Roxie playback choices until a mapping is configured.
 
 ## Run locally
 
 ```bash
-cp .env.example .env
+npm install
 npm start
 ```
 
-Node 20+ is required. There are no runtime npm dependencies.
+Node 20+ is required.
 
-Open:
+Useful endpoints:
 
-- `http://localhost:7000/manifest.json`
-- `http://localhost:7000/configure`
-- `http://localhost:7000/health`
+```text
+GET /manifest.json
+GET /catalog/tv/nuvio_sports_today.json
+GET /catalog/tv/nuvio_sports_live.json
+GET /meta/tv/:id.json
+GET /stream/tv/:id.json
+GET /debug/feed.json
+GET /debug/playback-test.json
+GET /health
+```
 
-## Install in Nuvio/Stremio
+## Install in Nuvio
 
 After deployment, install:
 
@@ -40,88 +119,11 @@ After deployment, install:
 https://YOUR-HOST/manifest.json
 ```
 
-In Nuvio this goes under **Addons**, not Plugins.
+Use **Addons**, not Plugins.
 
-## Render
+## Playback test
 
-Push the folder to GitHub and create a Render Web Service, or use the included `render.yaml`. The start command is:
-
-```text
-npm start
-```
-
-## Authorized feed schema
-
-Set `AUTHORIZED_FEED_URL` to an HTTP endpoint returning either an array or `{ "items": [...] }`.
-
-Example:
-
-```json
-{
-  "items": [
-    {
-      "id": "channel-1",
-      "title": "My Sports Channel",
-      "category": "24/7",
-      "is24_7": true,
-      "poster": "https://example.com/poster.jpg",
-      "streams": [
-        {
-          "name": "My Provider",
-          "title": "1080p",
-          "url": "https://cdn.example.com/live/channel-1/master.m3u8"
-        }
-      ]
-    },
-    {
-      "id": "event-22",
-      "title": "Team A vs Team B",
-      "category": "football",
-      "startTime": 1788134400000,
-      "live": true,
-      "streams": [
-        { "url": "https://cdn.example.com/events/22/index.m3u8", "title": "Live" }
-      ]
-    }
-  ]
-}
-```
-
-For small self-hosted channel lists you can instead set `AUTHORIZED_CHANNELS_JSON` to the JSON array directly.
-
-## Mirror behavior
-
-### Streamed
-
-By default:
-
-```text
-https://streamed.pk
-https://streamed.st
-```
-
-The addon tries the most recently working host first and falls back to another base on request errors. When `STREAMED_DISCOVER_OFFICIAL_MIRRORS=true`, it may also read `STREAMED_MIRROR_INDEX` and accept only hostnames beginning with `streamed.`.
-
-### PPV
-
-Configure API bases explicitly:
-
-```env
-PPV_API_BASES=https://api.ppv.st
-```
-
-Additional bases can be comma-separated. The addon does not automatically rotate through third-party domains from general mirror indexes.
-
-## Routes
-
-```text
-GET /manifest.json
-GET /catalog/tv/:catalog.json
-GET /catalog/tv/:catalog/search=query.json
-GET /meta/tv/:id.json
-GET /stream/tv/:id.json
-GET /health
-```
+The 🧪 Playback Test catalog returns Apple’s public HLS developer stream. Use it to verify that Nuvio can discover the addon and play a normal `.m3u8` natively before debugging an event mapping.
 
 ## Tests
 
@@ -130,33 +132,6 @@ npm test
 npm run check
 ```
 
-## Feed troubleshooting (v1.1)
+## Optional authorized provider
 
-This revision separates **feed discovery** from **playback**, like a normal Stremio live-event catalog. Streamed events can appear even if no playable source is configured.
-
-Useful endpoints after deployment:
-
-```text
-GET /catalog/tv/nuvio_sports_today.json
-GET /catalog/tv/nuvio_sports_live.json
-GET /catalog/tv/nuvio_sports_networks.json
-GET /debug/feed.json
-GET /health
-```
-
-`/debug/feed.json` is the fastest way to verify whether upstream metadata is reaching the addon. If it contains `metas`, Nuvio should have catalog cards to display after refreshing/reinstalling the addon.
-
-The Streamed adapter now tolerates partial failures: if `/api/matches/live` fails but `/api/matches/all-today` works (or vice versa), the working feed is still returned. If both fail, `/api/matches/all` is tried as a final metadata fallback.
-
-## Playback test (v1.2)
-
-This build includes a `🧪 Playback Test` catalog enabled by default. It returns Apple's public HLS example stream so you can verify that Nuvio/Stremio sees a provider and can start playback independently of the sports metadata providers. Apple publishes HLS example streams for developer testing.
-
-After deployment, check:
-
-- `/health` — should report version `1.2.0`
-- `/catalog/tv/nuvio_sports_test.json` — should contain `Apple HLS Playback Test`
-- `/stream/tv/ls:test:apple-bipbop.json` — should return one stream
-- `/debug/playback-test.json` — convenience endpoint showing the same stream result
-
-Set `TEST_PROVIDER_ENABLED=false` after testing if you want to hide the test catalog.
+`AuthorizedJsonProvider` remains available for direct HLS/DASH/HTTP sources you control. Event-only catalog filtering will hide entries marked as 24/7 channels.

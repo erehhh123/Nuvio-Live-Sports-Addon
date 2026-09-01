@@ -7,8 +7,8 @@ const config = require('./config');
 const { manifest, builder } = require('./manifest');
 const Cache = require('./services/Cache');
 const Aggregator = require('./services/Aggregator');
-const StreamedProvider = require('./providers/StreamedProvider');
 const PpvMetadataProvider = require('./providers/PpvMetadataProvider');
+const RoxiePlaybackProvider = require('./providers/RoxiePlaybackProvider');
 const AuthorizedJsonProvider = require('./providers/AuthorizedJsonProvider');
 const TestHlsProvider = require('./providers/TestHlsProvider');
 const { makeId } = require('./utils/ids');
@@ -21,18 +21,17 @@ const providers = [];
 if (config.testProviderEnabled) {
   providers.push(new TestHlsProvider({ cache, enabled: true }));
 }
-if (config.streamed.enabled) {
-  providers.push(new StreamedProvider({
-    cache,
-    config: { ...config.streamed, timeoutMs: config.requestTimeoutMs }
-  }));
-}
+
+const roxiePlayback = new RoxiePlaybackProvider({ config: config.roxie });
+
 if (config.ppv.enabled) {
   providers.push(new PpvMetadataProvider({
     cache,
-    config: { ...config.ppv, timeoutMs: config.requestTimeoutMs }
+    config: { ...config.ppv, timeoutMs: config.requestTimeoutMs },
+    playbackProvider: roxiePlayback
   }));
 }
+
 providers.push(new AuthorizedJsonProvider({
   cache,
   config: config.authorized,
@@ -41,7 +40,6 @@ providers.push(new AuthorizedJsonProvider({
 
 const aggregator = new Aggregator(providers);
 
-// Register the same SDK handler model used by conventional Stremio addons.
 builder.defineCatalogHandler(({ type, id, extra }) =>
   handleCatalog(aggregator, type, id, extra)
 );
@@ -63,6 +61,7 @@ app.get('/', (req, res) => {
 <body style="font-family:sans-serif;max-width:760px;margin:40px auto;padding:0 20px">
 <h1>${manifest.name}</h1>
 <p>Version ${manifest.version}</p>
+<p>PPV provides event metadata; Roxie mappings provide direct/web playback choices.</p>
 <p>Install this addon with <code>${config.publicBaseUrl || ''}/manifest.json</code></p>
 <p><a href="/manifest.json">manifest.json</a> · <a href="/health">health</a> · <a href="/debug/playback-test.json">playback test</a></p>
 </body></html>`);
@@ -78,7 +77,8 @@ app.get('/health', async (req, res) => {
     version: manifest.version,
     sdk: true,
     stats: await aggregator.stats(),
-    providers: await aggregator.health()
+    providers: await aggregator.health(),
+    roxie: await roxiePlayback.health()
   });
 });
 
@@ -99,7 +99,6 @@ app.get('/debug/playback-test.json', async (req, res) => {
   });
 });
 
-// Mount the official Stremio addon router last. It serves manifest/catalog/meta/stream.
 app.use(getRouter(builder.getInterface()));
 
 const server = app.listen(config.port, '0.0.0.0', () => {
@@ -108,4 +107,4 @@ const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`Install manifest: ${base}/manifest.json`);
 });
 
-module.exports = { app, server, aggregator, builder };
+module.exports = { app, server, aggregator, builder, roxiePlayback };

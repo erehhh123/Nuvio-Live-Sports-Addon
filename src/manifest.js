@@ -2,9 +2,9 @@ const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
   id: 'community.nuvio.live-sports',
-  version: '1.5.1',
+  version: '1.6.0',
   name: '🏟️ Live Sports Hub',
-  description: 'Nuvio/Stremio event-only live sports addon with direct media preference and browser fallback.',
+  description: 'Event-only Nuvio/Stremio sports addon using PPV schedules with Roxie direct-stream and web-player playback choices.',
   types: ['tv'],
   resources: ['catalog', 'meta', 'stream'],
   idPrefixes: ['nuvio_sport_'],

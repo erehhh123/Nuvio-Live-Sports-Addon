@@ -4,8 +4,10 @@ const Cache = require('../src/services/Cache');
 const Aggregator = require('../src/services/Aggregator');
 const AuthorizedJsonProvider = require('../src/providers/AuthorizedJsonProvider');
 const TestHlsProvider = require('../src/providers/TestHlsProvider');
+const RoxiePlaybackProvider = require('../src/providers/RoxiePlaybackProvider');
 const { makeId, parseId } = require('../src/utils/ids');
 const { firstDirectMediaUrl, firstExternalUrl } = require('../src/utils/media');
+const { findBestMapping } = require('../src/services/EventMatcher');
 const { normalizeStream, dedupeAndSort } = require('../src/streams');
 
 const cache = new Cache(1000);
@@ -15,7 +17,7 @@ test('IDs round-trip', () => {
   assert.deepEqual(parseId(id), { provider: 'authorized', id: 'abc/123' });
 });
 
-test('authorized 24/7 channel appears and returns stream', async () => {
+test('event-only catalogs hide 24/7 channels', async () => {
   const provider = new AuthorizedJsonProvider({
     cache,
     timeoutMs: 100,
@@ -26,10 +28,8 @@ test('authorized 24/7 channel appears and returns stream', async () => {
     }
   });
   const agg = new Aggregator([provider]);
-  const channels = await agg.catalog('nuvio_sports_networks');
-  assert.equal(channels.length, 1);
-  const streams = await agg.streams(channels[0].id);
-  assert.equal(streams[0].url, 'https://example.com/live.m3u8');
+  const today = await agg.catalog('nuvio_sports_today');
+  assert.equal(today.length, 0);
 });
 
 test('today feed displays discovered events even when they have no playback streams', async () => {
@@ -72,6 +72,40 @@ test('direct media detector prefers HLS over embed page', () => {
   };
   assert.equal(firstDirectMediaUrl(candidate), candidate.hlsUrl);
   assert.equal(firstExternalUrl(candidate), candidate.embedUrl);
+});
+
+test('event matcher maps PPV title to configured Roxie event', () => {
+  const item = { sourceId: '42', title: 'Monday Night Raw Live Stream', category: 'wrestling' };
+  const result = findBestMapping(item, [
+    { match: 'Monday Night Raw', aliases: ['WWE Raw'], category: 'wrestling' }
+  ]);
+  assert.ok(result);
+  assert.equal(result.mapping.match, 'Monday Night Raw');
+});
+
+test('Roxie playback returns native direct stream and web fallback', async () => {
+  const provider = new RoxiePlaybackProvider({
+    config: {
+      enabled: true,
+      baseUrl: 'https://roxiestreams.info',
+      eventMap: [{
+        match: 'Monday Night Raw',
+        category: 'wrestling',
+        directUrls: [{ title: 'Direct HLS', url: 'https://media.example/wwe/master.m3u8' }],
+        webUrl: '/wwe-raw'
+      }]
+    }
+  });
+
+  const streams = await provider.getStreamsForEvent({
+    sourceId: '42',
+    title: 'Monday Night Raw Live Stream',
+    category: 'wrestling'
+  });
+
+  assert.equal(streams.length, 2);
+  assert.equal(streams[0].url, 'https://media.example/wwe/master.m3u8');
+  assert.equal(streams[1].externalUrl, 'https://roxiestreams.info/wwe-raw');
 });
 
 test('stream pipeline sorts native playback ahead of browser fallback', () => {

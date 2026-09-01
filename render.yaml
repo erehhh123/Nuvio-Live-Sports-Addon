@@ -9,9 +9,13 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
-      - key: STREAMED_ENABLED
-        value: true
       - key: PPV_ENABLED
         value: true
+      - key: ROXIE_ENABLED
+        value: true
+      - key: ROXIE_BASE_URL
+        value: https://roxiestreams.info
+      - key: ROXIE_EVENT_MAP_JSON
+        value: '[]'
       - key: CACHE_TTL_SECONDS
         value: 60
