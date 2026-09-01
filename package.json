@@ -1,6 +1,6 @@
 {
   "name": "nuvio-live-sports-addon",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "description": "Nuvio/Stremio event-only sports addon using Streamed metadata with Roxie direct/web playback mappings.",
   "type": "commonjs",
