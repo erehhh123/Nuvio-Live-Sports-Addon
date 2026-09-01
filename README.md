@@ -5,18 +5,20 @@ Event-only live sports addon for Nuvio/Stremio.
 ## Current architecture
 
 ```text
-PPV metadata API
+Streamed public match API
       ↓
 Live / Today / sport / Upcoming catalogs
       ↓
-PPV event selected in Nuvio
+Streamed event selected in Nuvio
       ↓
 Roxie event mapping
       ├─ direct HLS/DASH URL → native Nuvio player
       └─ Roxie web URL      → browser fallback
 ```
 
-Streamed is no longer part of the active provider path. PPV is used for schedules and event metadata only. Playback is delegated to `RoxiePlaybackProvider`.
+Streamed is used only for schedules and event metadata. Its stream/embed API is not used for playback. Playback is delegated to `RoxiePlaybackProvider`.
+
+PPV is not part of the active provider path in this version.
 
 ## Catalogs
 
@@ -34,9 +36,9 @@ Streamed is no longer part of the active provider path. PPV is used for schedule
 
 ## Roxie event mappings
 
-Set `ROXIE_EVENT_MAP_JSON` to an array of mappings. A mapping can match the PPV `sourceId`, event title, aliases, and optionally category.
+Set `ROXIE_EVENT_MAP_JSON` to an array of mappings. A mapping can match the Streamed `sourceId`, event title, aliases, and optionally category.
 
-Example:
+Example title mapping:
 
 ```json
 [
@@ -55,13 +57,13 @@ Example:
 ]
 ```
 
-For an exact PPV event ID, use `sourceId` instead of title matching:
+For an exact Streamed event ID, use `sourceId`:
 
 ```json
 [
   {
-    "sourceId": "12345",
-    "directUrl": "https://media.example/events/12345/index.m3u8",
+    "sourceId": "live-event_monday-night-raw-live-stream",
+    "directUrl": "https://media.example/events/raw/index.m3u8",
     "webUrl": "/example-event"
   }
 ]
@@ -69,7 +71,7 @@ For an exact PPV event ID, use `sourceId` instead of title matching:
 
 Relative `webUrl`/`webPath` values are resolved against `ROXIE_BASE_URL`.
 
-Only normal HTTP(S) HLS/DASH-style direct media URLs are accepted for the native option. Use sources you are authorized to access and redistribute.
+Only normal HTTP(S) HLS/DASH-style direct media URLs supplied in the mapping are accepted for the native option. Use sources you are authorized to access and redistribute.
 
 ## Environment
 
@@ -78,16 +80,17 @@ PORT=7000
 CACHE_TTL_SECONDS=60
 TEST_PROVIDER_ENABLED=true
 
-PPV_ENABLED=true
-PPV_API_BASES=https://api.ppv.st
-PPV_FEED_PATH=/api/streams
+STREAMED_ENABLED=true
+STREAMED_BASES=https://streamed.pk,https://streamed.st
+STREAMED_DISCOVER_OFFICIAL_MIRRORS=true
+STREAMED_MIRROR_INDEX=https://strmd.link/
 
 ROXIE_ENABLED=true
 ROXIE_BASE_URL=https://roxiestreams.info
 ROXIE_EVENT_MAP_JSON=[]
 ```
 
-`ROXIE_EVENT_MAP_JSON=[]` means PPV events still appear, but they return no Roxie playback choices until a mapping is configured.
+`ROXIE_EVENT_MAP_JSON=[]` means Streamed events still appear, but they return no Roxie playback choices until a mapping is configured.
 
 ## Run locally
 
@@ -134,4 +137,4 @@ npm run check
 
 ## Optional authorized provider
 
-`AuthorizedJsonProvider` remains available for direct HLS/DASH/HTTP sources you control. Event-only catalog filtering will hide entries marked as 24/7 channels.
+`AuthorizedJsonProvider` remains available for direct HLS/DASH/HTTP sources you control. Event-only catalog filtering hides entries marked as 24/7 channels.

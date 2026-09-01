@@ -4,6 +4,7 @@ const Cache = require('../src/services/Cache');
 const Aggregator = require('../src/services/Aggregator');
 const AuthorizedJsonProvider = require('../src/providers/AuthorizedJsonProvider');
 const TestHlsProvider = require('../src/providers/TestHlsProvider');
+const StreamedProvider = require('../src/providers/StreamedProvider');
 const RoxiePlaybackProvider = require('../src/providers/RoxiePlaybackProvider');
 const { makeId, parseId } = require('../src/utils/ids');
 const { firstDirectMediaUrl, firstExternalUrl } = require('../src/utils/media');
@@ -74,8 +75,12 @@ test('direct media detector prefers HLS over embed page', () => {
   assert.equal(firstExternalUrl(candidate), candidate.embedUrl);
 });
 
-test('event matcher maps PPV title to configured Roxie event', () => {
-  const item = { sourceId: '42', title: 'Monday Night Raw Live Stream', category: 'wrestling' };
+test('event matcher maps Streamed title to configured Roxie event', () => {
+  const item = {
+    sourceId: 'live-event_monday-night-raw-live-stream',
+    title: 'Monday Night Raw Live Stream',
+    category: 'wrestling'
+  };
   const result = findBestMapping(item, [
     { match: 'Monday Night Raw', aliases: ['WWE Raw'], category: 'wrestling' }
   ]);
@@ -98,11 +103,52 @@ test('Roxie playback returns native direct stream and web fallback', async () =>
   });
 
   const streams = await provider.getStreamsForEvent({
-    sourceId: '42',
+    sourceId: 'live-event_monday-night-raw-live-stream',
     title: 'Monday Night Raw Live Stream',
     category: 'wrestling'
   });
 
+  assert.equal(streams.length, 2);
+  assert.equal(streams[0].url, 'https://media.example/wwe/master.m3u8');
+  assert.equal(streams[1].externalUrl, 'https://roxiestreams.info/wwe-raw');
+});
+
+test('Streamed delegates playback to Roxie instead of its own stream API', async () => {
+  const roxie = new RoxiePlaybackProvider({
+    config: {
+      enabled: true,
+      baseUrl: 'https://roxiestreams.info',
+      eventMap: [{
+        sourceId: 'live-event_monday-night-raw-live-stream',
+        directUrl: 'https://media.example/wwe/master.m3u8',
+        webUrl: '/wwe-raw'
+      }]
+    }
+  });
+
+  const streamed = new StreamedProvider({
+    cache,
+    config: {
+      bases: ['https://streamed.example'],
+      timeoutMs: 100,
+      discoverOfficialMirrors: false,
+      mirrorIndex: ''
+    },
+    playbackProvider: roxie
+  });
+
+  streamed.getItem = async sourceId => ({
+    id: makeId('streamed', sourceId),
+    provider: 'streamed',
+    providerName: 'Streamed',
+    sourceId,
+    title: 'Monday Night Raw Live Stream',
+    category: 'wrestling',
+    live: true,
+    is24_7: false
+  });
+
+  const streams = await streamed.getStreams('live-event_monday-night-raw-live-stream');
   assert.equal(streams.length, 2);
   assert.equal(streams[0].url, 'https://media.example/wwe/master.m3u8');
   assert.equal(streams[1].externalUrl, 'https://roxiestreams.info/wwe-raw');
