@@ -37,7 +37,7 @@ module.exports = {
 
   roxie: {
     enabled: boolEnv('ROXIE_ENABLED', true),
-    baseUrl: process.env.ROXIE_BASE_URL || 'https://roxiestreams.info',
+    baseUrl: process.env.ROXIE_BASE_URL || 'https://roxiestreams.su',
     eventMap: jsonEnv('ROXIE_EVENT_MAP_JSON', [])
   },
 
