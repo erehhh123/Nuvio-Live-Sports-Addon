@@ -1,15 +1,15 @@
 const BaseProvider = require('./BaseProvider');
 const { makeId } = require('../utils/ids');
 const { normalizeCategory, isProbablyLive, posterFallback } = require('../utils/normalize');
-const { firstDirectMediaUrl, firstExternalUrl } = require('../utils/media');
 const { MirrorManager, discoverStreamedOfficialMirrors } = require('../services/MirrorManager');
 
 class StreamedProvider extends BaseProvider {
-  constructor({ cache, config }) {
+  constructor({ cache, config, playbackProvider = null }) {
     super({ cache });
     this.id = 'streamed';
     this.name = 'Streamed';
     this.config = config;
+    this.playbackProvider = playbackProvider;
     this.mirrors = new MirrorManager({
       name: 'streamed',
       bases: config.bases,
@@ -31,7 +31,7 @@ class StreamedProvider extends BaseProvider {
   }
 
   async getItems() {
-    return this.cache.remember('provider:streamed:items:v2', async () => {
+    return this.cache.remember('provider:streamed:items:v3', async () => {
       const [liveResult, todayResult] = await Promise.all([
         this.optionalRequest('/api/matches/live'),
         this.optionalRequest('/api/matches/all-today')
@@ -79,9 +79,9 @@ class StreamedProvider extends BaseProvider {
       live: isProbablyLive(startTime, explicitLive),
       is24_7: false,
       poster,
-      description: `${category} event from Streamed's public match feed.`,
+      description: `${category} event from Streamed's public match feed. Playback is provided by Roxie mappings.`,
       sourceCount: Array.isArray(raw.sources) ? raw.sources.length : 0,
-      rawSources: Array.isArray(raw.sources) ? raw.sources : []
+      metadata: raw
     };
   }
 
@@ -90,51 +90,19 @@ class StreamedProvider extends BaseProvider {
     return items.find(x => x.sourceId === String(sourceId)) || null;
   }
 
-  // Combined playback path: query the provider's documented stream entries, prefer
-  // a direct HLS/DASH URL when the response already exposes one, and keep embedUrl
-  // only as a browser-player fallback.
   async getStreams(sourceId) {
     const item = await this.getItem(sourceId);
-    if (!item || !Array.isArray(item.rawSources) || item.rawSources.length === 0) return [];
-
-    const requests = item.rawSources
-      .filter(src => src && src.source != null && src.id != null)
-      .map(async src => {
-        const source = encodeURIComponent(String(src.source));
-        const id = encodeURIComponent(String(src.id));
-        const result = await this.optionalRequest(`/api/stream/${source}/${id}`);
-        if (!result.ok || !Array.isArray(result.value)) return [];
-
-        return result.value.map((stream, index) => {
-          if (!stream || typeof stream !== 'object') return null;
-          const directUrl = firstDirectMediaUrl(stream);
-          const externalUrl = directUrl ? '' : firstExternalUrl(stream);
-          if (!directUrl && !externalUrl) return null;
-
-          return {
-            name: `Streamed • ${stream.source || src.source}`,
-            title: [
-              stream.language || 'Live',
-              stream.hd ? 'HD' : null,
-              stream.quality || stream.resolution || null,
-              Number.isFinite(Number(stream.streamNo)) ? `#${stream.streamNo}` : `#${index + 1}`
-            ].filter(Boolean).join(' • '),
-            url: directUrl || undefined,
-            externalUrl: externalUrl || undefined,
-            resolution: stream.resolution || stream.quality || null,
-            sourceName: `streamed:${stream.source || src.source}`
-          };
-        }).filter(Boolean);
-      });
-
-    const settled = await Promise.allSettled(requests);
-    return settled.flatMap(result =>
-      result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []
-    );
+    if (!item || !this.playbackProvider) return [];
+    return this.playbackProvider.getStreamsForEvent(item);
   }
 
   async health() {
-    return { provider: this.id, mirrors: await this.mirrors.health() };
+    return {
+      provider: this.id,
+      role: 'metadata',
+      mirrors: await this.mirrors.health(),
+      playback: this.playbackProvider ? await this.playbackProvider.health() : null
+    };
   }
 }
 
