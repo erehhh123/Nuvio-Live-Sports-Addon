@@ -1,14 +1,14 @@
 {
   "name": "nuvio-live-sports-addon",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "private": true,
-  "description": "Nuvio/Stremio event-only live sports addon with direct media preference and provider fallbacks.",
+  "description": "Nuvio/Stremio event-only sports addon using PPV metadata with Roxie direct/web playback mappings.",
   "type": "commonjs",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test",
-    "check": "node --check src/index.js && node --check src/catalog.js && node --check src/streams.js && node --check src/domain/StreamEntity.js && node --check src/services/StreamScoringService.js && node --check src/utils/media.js && node --check src/services/Aggregator.js && node --check src/providers/StreamedProvider.js && node --check src/providers/PpvMetadataProvider.js && node --check src/providers/AuthorizedJsonProvider.js && node --check src/providers/TestHlsProvider.js"
+    "check": "node --check src/index.js && node --check src/catalog.js && node --check src/streams.js && node --check src/domain/StreamEntity.js && node --check src/services/StreamScoringService.js && node --check src/services/EventMatcher.js && node --check src/utils/media.js && node --check src/services/Aggregator.js && node --check src/providers/RoxiePlaybackProvider.js && node --check src/providers/PpvMetadataProvider.js && node --check src/providers/AuthorizedJsonProvider.js && node --check src/providers/TestHlsProvider.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
