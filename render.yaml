@@ -20,8 +20,8 @@ services:
       - key: ROXIE_ENABLED
         value: true
       - key: ROXIE_BASE_URL
-        value: https://roxiestreams.info
+        value: https://roxiestreams.su
       - key: ROXIE_EVENT_MAP_JSON
-        value: '[]'
+        value: '[{"sourceId":"live-event_monday-night-raw-live-stream","match":"Monday Night Raw","aliases":["WWE Raw","Raw"],"category":"wrestling","webUrl":"https://roxiestreams.su/wwe-streams"}]'
       - key: CACHE_TTL_SECONDS
         value: 60
