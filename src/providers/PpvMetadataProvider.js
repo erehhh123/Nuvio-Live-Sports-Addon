@@ -1,15 +1,15 @@
 const BaseProvider = require('./BaseProvider');
 const { makeId } = require('../utils/ids');
 const { normalizeCategory, isTwentyFourSeven, isProbablyLive, posterFallback } = require('../utils/normalize');
-const { firstDirectMediaUrl, firstExternalUrl } = require('../utils/media');
 const { MirrorManager } = require('../services/MirrorManager');
 
 class PpvMetadataProvider extends BaseProvider {
-  constructor({ cache, config }) {
+  constructor({ cache, config, playbackProvider = null }) {
     super({ cache });
     this.id = 'ppv';
     this.name = 'PPV';
     this.feedPath = config.feedPath || '/api/streams';
+    this.playbackProvider = playbackProvider;
     this.mirrors = new MirrorManager({
       name: 'ppv-api',
       bases: config.apiBases,
@@ -19,7 +19,7 @@ class PpvMetadataProvider extends BaseProvider {
   }
 
   async getItems() {
-    return this.cache.remember('provider:ppv:items:v4', async () => {
+    return this.cache.remember('provider:ppv:items:v5', async () => {
       const { value: data } = await this.mirrors.requestJson(this.feedPath, {
         headers: { accept: 'application/json' }
       });
@@ -32,7 +32,7 @@ class PpvMetadataProvider extends BaseProvider {
           if (!raw || raw.id == null) continue;
           const startTime = toMillis(raw.starts_at ?? raw.startTime ?? raw.date);
           const base = {
-            title: raw.name || raw.title || `Sports channel ${raw.id}`,
+            title: raw.name || raw.title || `Sports event ${raw.id}`,
             category,
             tag: raw.tag || raw.league,
             startTime
@@ -49,9 +49,9 @@ class PpvMetadataProvider extends BaseProvider {
             live: Boolean(raw.live) || isProbablyLive(startTime, false),
             is24_7: Boolean(raw.is24_7) || isTwentyFourSeven(base),
             poster: raw.poster || raw.image || posterFallback(category),
-            description: `${base.tag || category} listing from the configured PPV feed.`,
+            description: `${base.tag || category} event from the configured PPV metadata feed.`,
             viewers: Number.parseInt(raw.viewers || '0', 10) || 0,
-            playbackCandidate: raw
+            metadata: raw
           });
         }
       }
@@ -66,25 +66,18 @@ class PpvMetadataProvider extends BaseProvider {
 
   async getStreams(sourceId) {
     const item = await this.getItem(sourceId);
-    if (!item || !item.playbackCandidate) return [];
-
-    const raw = item.playbackCandidate;
-    const directUrl = firstDirectMediaUrl(raw);
-    const externalUrl = directUrl ? '' : firstExternalUrl(raw);
-    if (!directUrl && !externalUrl) return [];
-
-    return [{
-      name: 'PPV',
-      title: [item.is24_7 ? '24/7' : 'Live', raw.quality || raw.resolution || null].filter(Boolean).join(' • '),
-      url: directUrl || undefined,
-      externalUrl: externalUrl || undefined,
-      resolution: raw.resolution || raw.quality || null,
-      sourceName: 'ppv'
-    }];
+    if (!item || !this.playbackProvider) return [];
+    return this.playbackProvider.getStreamsForEvent(item);
   }
 
   async health() {
-    return { provider: this.id, feedPath: this.feedPath, mirrors: await this.mirrors.health() };
+    return {
+      provider: this.id,
+      role: 'metadata',
+      feedPath: this.feedPath,
+      mirrors: await this.mirrors.health(),
+      playback: this.playbackProvider ? await this.playbackProvider.health() : null
+    };
   }
 }
 
