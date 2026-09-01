@@ -9,8 +9,14 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
-      - key: PPV_ENABLED
+      - key: STREAMED_ENABLED
         value: true
+      - key: STREAMED_BASES
+        value: https://streamed.pk,https://streamed.st
+      - key: STREAMED_DISCOVER_OFFICIAL_MIRRORS
+        value: true
+      - key: STREAMED_MIRROR_INDEX
+        value: https://strmd.link/
       - key: ROXIE_ENABLED
         value: true
       - key: ROXIE_BASE_URL
